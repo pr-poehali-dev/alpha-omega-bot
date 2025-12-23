@@ -88,6 +88,8 @@ const analyzePatternsAndPredict = (history: PredictionValue[], steps: number = 3
   return predictions;
 };
 
+const OCR_API_URL = 'https://functions.poehali.dev/8f145892-2b01-4edc-ad3e-dd348375bfad';
+
 const Index = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [history, setHistory] = useState<PredictionRecord[]>([]);
@@ -95,7 +97,12 @@ const Index = () => {
   const [currentInput, setCurrentInput] = useState('');
   const [countdown, setCountdown] = useState(30);
   const [interval, setIntervalDuration] = useState(30);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [captureArea, setCaptureArea] = useState<{x: number, y: number, width: number, height: number} | null>(null);
+  const [lastDetectedText, setLastDetectedText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -103,6 +110,9 @@ const Index = () => {
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
+          if (isCapturing) {
+            captureAndRecognize();
+          }
           return interval;
         }
         return prev - 1;
@@ -110,7 +120,90 @@ const Index = () => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isRunning, interval]);
+  }, [isRunning, interval, isCapturing]);
+
+  const captureAndRecognize = async () => {
+    if (!videoRef.current || !canvasRef.current || !captureArea) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) return;
+
+    canvas.width = captureArea.width;
+    canvas.height = captureArea.height;
+
+    ctx.drawImage(
+      video,
+      captureArea.x,
+      captureArea.y,
+      captureArea.width,
+      captureArea.height,
+      0,
+      0,
+      captureArea.width,
+      captureArea.height
+    );
+
+    const imageData = canvas.toDataURL('image/png');
+
+    try {
+      const response = await fetch(OCR_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ image: imageData }),
+      });
+
+      const data = await response.json();
+      setLastDetectedText(data.raw_text || 'Нет текста');
+
+      if (data.value === 'Альфа' || data.value === 'Омега') {
+        handleManualInput(data.value);
+      }
+    } catch (error) {
+      console.error('OCR error:', error);
+    }
+  };
+
+  const startScreenCapture = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { mediaSource: 'screen' as any },
+      });
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        setIsCapturing(true);
+      }
+    } catch (error) {
+      console.error('Screen capture error:', error);
+      alert('Не удалось захватить экран. Разрешите доступ к экрану.');
+    }
+  };
+
+  const stopScreenCapture = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setIsCapturing(false);
+  };
+
+  const selectCaptureArea = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    setCaptureArea({
+      x: video.videoWidth * 0.3,
+      y: video.videoHeight * 0.3,
+      width: video.videoWidth * 0.4,
+      height: video.videoHeight * 0.4,
+    });
+  };
 
   const handleManualInput = (value: PredictionValue) => {
     const predictions3Steps = analyzePatternsAndPredict(sourceData, 3);
@@ -359,41 +452,107 @@ const Index = () => {
             </div>
           </div>
 
-          {isRunning && (
-            <div className="border-t pt-4 mt-4">
-              <Label htmlFor="data-input" className="text-base font-semibold mb-2 block">
-                Ввод данных (A - Альфа, O - Омега)
-              </Label>
-              <div className="flex gap-2">
-                <Input
-                  ref={inputRef}
-                  id="data-input"
-                  type="text"
-                  value={currentInput}
-                  onChange={(e) => setCurrentInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Нажмите A или O для ввода..."
-                  className="flex-1"
-                  autoFocus
-                />
+          <div className="border-t pt-4 mt-4 space-y-4">
+            <div className="flex gap-2">
+              {!isCapturing ? (
                 <Button 
-                  onClick={() => handleManualInput('Альфа')}
-                  className="bg-green-500 hover:bg-green-600"
+                  onClick={startScreenCapture}
+                  className="gap-2"
+                  variant="default"
                 >
-                  Альфа
+                  <Icon name="Monitor" size={16} />
+                  Захватить экран
                 </Button>
-                <Button 
-                  onClick={() => handleManualInput('Омега')}
-                  className="bg-purple-500 hover:bg-purple-600"
-                >
-                  Омега
-                </Button>
-              </div>
-              <p className="text-sm text-muted-foreground mt-2">
-                Система работает в фоновом режиме. Вводите значения по мере появления.
-              </p>
+              ) : (
+                <>
+                  <Button 
+                    onClick={stopScreenCapture}
+                    variant="destructive"
+                    className="gap-2"
+                  >
+                    <Icon name="MonitorOff" size={16} />
+                    Остановить захват
+                  </Button>
+                  <Button 
+                    onClick={selectCaptureArea}
+                    variant="outline"
+                    className="gap-2"
+                  >
+                    <Icon name="Maximize" size={16} />
+                    Выбрать область
+                  </Button>
+                </>
+              )}
             </div>
-          )}
+
+            {isCapturing && (
+              <div className="space-y-2">
+                <div className="relative bg-muted rounded-lg overflow-hidden" style={{ maxHeight: '300px' }}>
+                  <video
+                    ref={videoRef}
+                    className="w-full h-auto"
+                    muted
+                    playsInline
+                  />
+                  {captureArea && (
+                    <div
+                      className="absolute border-4 border-primary bg-primary/10"
+                      style={{
+                        left: `${(captureArea.x / (videoRef.current?.videoWidth || 1)) * 100}%`,
+                        top: `${(captureArea.y / (videoRef.current?.videoHeight || 1)) * 100}%`,
+                        width: `${(captureArea.width / (videoRef.current?.videoWidth || 1)) * 100}%`,
+                        height: `${(captureArea.height / (videoRef.current?.videoHeight || 1)) * 100}%`,
+                      }}
+                    >
+                      <span className="absolute top-1 left-1 bg-primary text-primary-foreground px-2 py-1 text-xs rounded">
+                        Область распознавания
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <canvas ref={canvasRef} className="hidden" />
+                {lastDetectedText && (
+                  <div className="bg-muted p-3 rounded">
+                    <p className="text-sm font-semibold">Последний распознанный текст:</p>
+                    <p className="text-xs text-muted-foreground mt-1">{lastDetectedText}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isRunning && !isCapturing && (
+              <div>
+                <Label htmlFor="data-input" className="text-base font-semibold mb-2 block">
+                  Ручной ввод (A - Альфа, O - Омега)
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    ref={inputRef}
+                    id="data-input"
+                    type="text"
+                    value={currentInput}
+                    onChange={(e) => setCurrentInput(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Нажмите A или O для ввода..."
+                    className="flex-1"
+                    autoFocus
+                  />
+                  <Button 
+                    onClick={() => handleManualInput('Альфа')}
+                    className="bg-green-500 hover:bg-green-600"
+                  >
+                    Альфа
+                  </Button>
+                  <Button 
+                    onClick={() => handleManualInput('Омега')}
+                    className="bg-purple-500 hover:bg-purple-600"
+                  >
+                    Омега
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </Card>
 
         {sourceData.length > 0 && (
