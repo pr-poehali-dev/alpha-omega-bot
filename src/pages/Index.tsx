@@ -307,8 +307,8 @@ const Index = () => {
       {
         label: 'Альфа',
         data: sourceData.slice(-20).map(v => v === 'Альфа' ? 1 : 0),
-        borderColor: 'rgb(16, 185, 129)',
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        borderColor: 'rgb(14, 165, 233)',
+        backgroundColor: 'rgba(14, 165, 233, 0.1)',
         tension: 0.4,
       },
       {
@@ -393,8 +393,8 @@ const Index = () => {
                   variant={pred === 'Альфа' ? 'default' : 'secondary'}
                   className={`text-xs font-bold px-2 py-1 ${
                     pred === 'Альфа' 
-                      ? 'bg-green-500 hover:bg-green-600' 
-                      : 'bg-purple-500 hover:bg-purple-600'
+                      ? 'bg-sky-500 hover:bg-sky-600 text-white' 
+                      : 'bg-purple-500 hover:bg-purple-600 text-white'
                   }`}
                 >
                   {idx + 1}: {pred}
@@ -539,13 +539,13 @@ const Index = () => {
                   />
                   <Button 
                     onClick={() => handleManualInput('Альфа')}
-                    className="bg-green-500 hover:bg-green-600"
+                    className="bg-sky-500 hover:bg-sky-600 text-white"
                   >
                     Альфа
                   </Button>
                   <Button 
                     onClick={() => handleManualInput('Омега')}
-                    className="bg-purple-500 hover:bg-purple-600"
+                    className="bg-purple-500 hover:bg-purple-600 text-white"
                   >
                     Омега
                   </Button>
@@ -596,13 +596,18 @@ const Index = () => {
                       <TableCell className="font-mono text-sm">
                         {record.timestamp.toLocaleTimeString('ru-RU')}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className={record.actual === 'Альфа' 
+                        ? 'bg-sky-100' 
+                        : record.actual === 'Омега' 
+                        ? 'bg-purple-100' 
+                        : ''
+                      }>
                         {record.actual && (
                           <Badge 
                             variant={record.actual === 'Альфа' ? 'default' : 'secondary'}
                             className={record.actual === 'Альфа' 
-                              ? 'bg-green-500 hover:bg-green-600' 
-                              : 'bg-purple-500 hover:bg-purple-600'
+                              ? 'bg-sky-500 hover:bg-sky-600 text-white' 
+                              : 'bg-purple-500 hover:bg-purple-600 text-white'
                             }
                           >
                             {record.actual}
